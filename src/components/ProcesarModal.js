@@ -7,13 +7,14 @@ export default function ProcesarModal({ item, areas, proyectos, onConvertirTarea
   const [prioridad, setPrioridad] = useState('normal')
   const [titulo, setTitulo] = useState(item.contenido)
   const [descripcion, setDescripcion] = useState(item.descripcion || '')
+  const [fechaLimite, setFechaLimite] = useState('')
   const proyectosFiltrados = areaId ? proyectos.filter(p => p.area_id === areaId) : proyectos
 
   const handleGuardar = () => {
   if (!proyectoId && tipo === 'tarea') return
   const itemEditado = { ...item, contenido: titulo, descripcion }
   if (tipo === 'tarea') {
-    onConvertirTarea(itemEditado, proyectoId, prioridad)
+    onConvertirTarea(itemEditado, proyectoId, prioridad, fechaLimite || null)
   } else {
     onConvertirNota(itemEditado)
   }
@@ -114,11 +115,22 @@ export default function ProcesarModal({ item, areas, proyectos, onConvertirTarea
           )}
 
           {tipo === 'tarea' && (
-            <select value={prioridad} onChange={e => setPrioridad(e.target.value)} style={inputStyle}>
-              <option value="alta">Prioridad alta</option>
-              <option value="normal">Prioridad normal</option>
-              <option value="baja">Prioridad baja</option>
-            </select>
+            <>
+              <select value={prioridad} onChange={e => setPrioridad(e.target.value)} style={inputStyle}>
+                <option value="alta">Prioridad alta</option>
+                <option value="normal">Prioridad normal</option>
+                <option value="baja">Prioridad baja</option>
+              </select>
+              <div>
+                <label style={{ color: '#3a3a5a', fontSize: '12px', marginBottom: '6px', display: 'block' }}>Fecha límite (opcional)</label>
+                <input
+                  type="date"
+                  value={fechaLimite}
+                  onChange={e => setFechaLimite(e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+            </>
           )}
         </div>
 

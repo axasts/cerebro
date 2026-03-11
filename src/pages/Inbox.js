@@ -29,12 +29,13 @@ export default function Inbox({ session, contexto }) {
     setExpandirCaptura(false)
   }
 
-  const handleConvertirTarea = async (item, proyectoId, prioridad) => {
+  const handleConvertirTarea = async (item, proyectoId, prioridad, fechaLimite = null) => {
     await supabase.from('tareas').insert([{
       titulo: item.contenido,
       descripcion: item.descripcion || '',
       proyecto_id: proyectoId,
       prioridad,
+      fecha_limite: fechaLimite,
       user_id: session?.user?.id
     }])
     await procesarItem(item.id)
