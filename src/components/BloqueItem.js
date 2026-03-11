@@ -21,10 +21,12 @@ export default function BloqueItem({ bloque, nombreProyecto, onClick }) {
         fontSize: '11px',
         color: '#e8e8ff',
         cursor: 'grab',
-        marginBottom: '2px',
         opacity: isDragging ? 0.4 : 1,
         transform: CSS.Translate.toString(transform),
-        touchAction: 'none'
+        touchAction: 'none',
+        height: '100%',
+        overflow: 'hidden',
+        boxSizing: 'border-box'
       }}
     >
       <div style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bloque.titulo}</div>

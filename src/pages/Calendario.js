@@ -5,11 +5,12 @@ import usePARA from '../hooks/usePARA'
 import useTodasTareas from '../hooks/useTodasTareas'
 import BloqueModal from '../components/BloqueModal'
 import BloqueItem from '../components/BloqueItem'
-import CeldaCalendario from '../components/CeldaCalendario'
+import { useDroppable } from '@dnd-kit/core'
 
+const HORA_ALTURA = 40 // px por hora
 const HORAS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`)
 
-const getDiassemana = (fechaBase) => {
+const getDiasSemana = (fechaBase) => {
   const dias = []
   const inicio = new Date(fechaBase)
   const diaSemana = inicio.getDay()
@@ -30,6 +31,80 @@ const nombreDia = (date) => {
   return nombres[date.getDay()]
 }
 
+const horaAMinutos = (hora) => {
+  const [h, m] = hora.split(':').map(Number)
+  return h * 60 + m
+}
+
+function ColumniaDia({ fechaDia, bloques, proyectos, onClickCelda, onEditarBloque }) {
+  const { setNodeRef, isOver } = useDroppable({ id: fechaDia })
+
+  const nombreProyecto = (proyectoId) => {
+    const p = proyectos.find(p => p.id === proyectoId)
+    return p ? p.nombre : null
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      onClick={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect()
+        const y = e.clientY - rect.top
+        const minutos = Math.floor(y / HORA_ALTURA * 60)
+        const horas = Math.floor(minutos / 60)
+        const mins = Math.floor(minutos % 60 / 15) * 15
+        const hora = `${String(horas).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
+        onClickCelda(fechaDia, hora)
+      }}
+      style={{
+        position: 'relative',
+        height: `${24 * HORA_ALTURA}px`,
+        background: isOver ? '#1e1e3a' : 'transparent',
+        cursor: 'pointer'
+      }}
+    >
+      {/* Líneas de hora */}
+      {HORAS.map((hora, i) => (
+        <div key={hora} style={{
+          position: 'absolute',
+          top: `${i * HORA_ALTURA}px`,
+          left: 0, right: 0,
+          borderTop: '1px solid #1e1e38',
+          height: `${HORA_ALTURA}px`,
+          pointerEvents: 'none'
+        }} />
+      ))}
+
+      {/* Bloques */}
+      {bloques.map(bloque => {
+        const inicioMin = horaAMinutos(bloque.hora_inicio)
+        const finMin = horaAMinutos(bloque.hora_fin)
+        const top = (inicioMin / 60) * HORA_ALTURA
+        const height = Math.max(((finMin - inicioMin) / 60) * HORA_ALTURA, 24)
+        return (
+          <div
+            key={bloque.id}
+            style={{
+              position: 'absolute',
+              top: `${top}px`,
+              left: '2px',
+              right: '2px',
+              height: `${height}px`,
+              zIndex: 10
+            }}
+          >
+            <BloqueItem
+              bloque={bloque}
+              nombreProyecto={nombreProyecto(bloque.proyecto_id)}
+              onClick={(e) => { e.stopPropagation(); onEditarBloque(bloque) }}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function Calendario({ session }) {
   const { bloques, loading, crearBloque, editarBloque, eliminarBloque, bloquesPorFecha } = useBloques(session?.user?.id)
   const { proyectos } = usePARA(session?.user?.id)
@@ -45,7 +120,7 @@ export default function Calendario({ session }) {
     activationConstraint: { distance: 5 }
   }))
 
-  const diasSemana = getDiassemana(fechaBase)
+  const diasSemana = getDiasSemana(fechaBase)
   const hoy = fechaISO(new Date())
 
   const handleNuevoBloque = (fecha, hora) => {
@@ -83,23 +158,13 @@ export default function Calendario({ session }) {
     if (!over) return
     const bloque = bloques.find(b => b.id === active.id)
     if (!bloque) return
-    const [nuevaFecha, nuevaHora] = over.id.split('|')
-    if (!nuevaFecha || !nuevaHora) return
-    if (bloque.fecha === nuevaFecha && bloque.hora_inicio.startsWith(nuevaHora.substring(0, 2))) return
-    const duracion = (() => {
-      const [h1, m1] = bloque.hora_inicio.split(':').map(Number)
-      const [h2, m2] = bloque.hora_fin.split(':').map(Number)
-      return (h2 * 60 + m2) - (h1 * 60 + m1)
-    })()
-    const [hh, mm] = nuevaHora.split(':').map(Number)
-    const finTotal = hh * 60 + mm + duracion
-    const horaFin = `${String(Math.floor(finTotal / 60) % 24).padStart(2, '0')}:${String(finTotal % 60).padStart(2, '0')}`
-    await editarBloque(bloque.id, { fecha: nuevaFecha, hora_inicio: nuevaHora, hora_fin: horaFin })
-  }
-
-  const nombreProyecto = (proyectoId) => {
-    const p = proyectos.find(p => p.id === proyectoId)
-    return p ? p.nombre : null
+    const nuevaFecha = over.id
+    if (bloque.fecha === nuevaFecha) return
+    const duracion = horaAMinutos(bloque.hora_fin) - horaAMinutos(bloque.hora_inicio)
+    const inicioMin = horaAMinutos(bloque.hora_inicio)
+    const finMin = inicioMin + duracion
+    const horaFin = `${String(Math.floor(finMin / 60) % 24).padStart(2, '0')}:${String(finMin % 60).padStart(2, '0')}`
+    await editarBloque(bloque.id, { fecha: nuevaFecha, hora_inicio: bloque.hora_inicio, hora_fin: horaFin })
   }
 
   const btnNavStyle = {
@@ -130,19 +195,20 @@ export default function Calendario({ session }) {
         <div style={{
           display: 'grid',
           gridTemplateColumns: '50px repeat(7, 1fr)',
-          gap: '1px',
           background: '#22223a',
           borderRadius: '12px',
           overflow: 'hidden',
           border: '1px solid #22223a'
         }}>
-          <div style={{ background: '#16162a' }} />
+          {/* Header */}
+          <div style={{ background: '#16162a', borderBottom: '1px solid #22223a' }} />
           {diasSemana.map(dia => (
             <div key={fechaISO(dia)} style={{
               background: fechaISO(dia) === hoy ? '#1e1e3a' : '#16162a',
               padding: '10px 8px',
               textAlign: 'center',
-              borderBottom: '1px solid #22223a'
+              borderBottom: '1px solid #22223a',
+              borderLeft: '1px solid #22223a'
             }}>
               <div style={{ color: '#6b6b8a', fontSize: '10px', letterSpacing: '1px', textTransform: 'uppercase' }}>{nombreDia(dia)}</div>
               <div style={{
@@ -156,43 +222,41 @@ export default function Calendario({ session }) {
             </div>
           ))}
 
-          {HORAS.map(hora => (
-            <React.Fragment key={hora}>
-              <div style={{
-  background: '#16162a',
-  padding: '8px 6px',
-  textAlign: 'center',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  color: '#6b6b8a',
-  fontSize: '10px',
-  borderTop: '1px solid #1e1e32'
-}}>
+          {/* Columna horas + columnas días */}
+          <div style={{ background: '#16162a' }}>
+            {HORAS.map((hora, i) => (
+              <div key={hora} style={{
+                height: `${HORA_ALTURA}px`,
+                display: 'flex', alignItems: 'center',
+                justifyContent: 'center',
+                paddingTop: '4px',
+                color: '#6b6b8a',
+                fontSize: '10px',
+                borderTop: '1px solid #1e1e38'
+              }}>
                 {hora}
               </div>
-              {diasSemana.map(dia => {
-                const fechaDia = fechaISO(dia)
-                const bloquesDelDia = bloquesPorFecha(fechaDia).filter(b => b.hora_inicio.startsWith(hora.substring(0, 2)))
-                return (
-                  <CeldaCalendario
-                    key={fechaDia}
-                    id={`${fechaDia}|${hora}`}
-                    onClick={() => handleNuevoBloque(fechaDia, hora)}
-                  >
-                    {bloquesDelDia.map(bloque => (
-                      <BloqueItem
-                        key={bloque.id}
-                        bloque={bloque}
-                        nombreProyecto={nombreProyecto(bloque.proyecto_id)}
-                        onClick={(e) => { e.stopPropagation(); handleEditarBloque(bloque) }}
-                      />
-                    ))}
-                  </CeldaCalendario>
-                )
-              })}
-            </React.Fragment>
-          ))}
+            ))}
+          </div>
+
+          {diasSemana.map(dia => {
+            const fechaDia = fechaISO(dia)
+            const bloquesDelDia = bloquesPorFecha(fechaDia)
+            return (
+              <div key={fechaDia} style={{
+                background: fechaDia === hoy ? '#1a1a2e' : '#16162a',
+                borderLeft: '1px solid #22223a'
+              }}>
+                <ColumniaDia
+                  fechaDia={fechaDia}
+                  bloques={bloquesDelDia}
+                  proyectos={proyectos}
+                  onClickCelda={handleNuevoBloque}
+                  onEditarBloque={handleEditarBloque}
+                />
+              </div>
+            )
+          })}
         </div>
 
         <DragOverlay>
